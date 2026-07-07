@@ -12,12 +12,18 @@ import {
   CalendarDays,
   Wallet,
 } from "lucide-react";
+import { useUser } from "../context/UserContext";
+import { computeReadiness, generateMissions } from "../lib/readiness";
 
 const Spline = lazy(() => import("@splinetool/react-spline"));
 
 export default function Landing() {
   const [active, setActive] = useState(false);
   const navigate = useNavigate();
+  const { profile, onboarded } = useUser();
+  const result = computeReadiness(profile);
+  const missions = generateMissions(result);
+  const topMission = missions[0];
 
   return (
     <main className="min-h-screen bg-[#0B0B0C] text-white antialiased">

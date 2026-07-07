@@ -31,7 +31,7 @@ const STEPS = ["Goal", "Financials", "Credit profile", "Review"];
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { profile, setProfile } = useUser();
+  const { profile, setProfile, setOnboarded } = useUser(); // add setOnboarded
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<UserProfile>(profile);
 
@@ -57,7 +57,8 @@ export default function Onboarding() {
 
   const finish = () => {
     setProfile(draft);
-    navigate("/");
+    setOnboarded(true);
+    navigate("/dashboard");
   };
 
   const handleFile = async (file: File) => {
@@ -186,7 +187,7 @@ export default function Onboarding() {
               Your financial snapshot
             </h1>
             <p className="mt-2 text-white/55">
-              Rough numbers are fine — you can update these later.
+              Rough numbers are fine, you can update these later.
             </p>
 
             <div className="mt-8 space-y-5">

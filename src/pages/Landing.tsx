@@ -14,16 +14,21 @@ import {
 } from "lucide-react";
 import { useUser } from "../context/UserContext";
 import { computeReadiness, generateMissions } from "../lib/readiness";
+import CoachChat from "../components/CoachChat";
 
 const Spline = lazy(() => import("@splinetool/react-spline"));
 
 export default function Landing() {
   const [active, setActive] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const navigate = useNavigate();
+
   const { profile, onboarded } = useUser();
   const result = computeReadiness(profile);
   const missions = generateMissions(result);
   const topMission = missions[0];
+
+  const startPlan = () => navigate(onboarded ? "/dashboard" : "/onboarding");
 
   return (
     <main className="min-h-screen bg-[#0B0B0C] text-white antialiased">
@@ -55,7 +60,7 @@ export default function Landing() {
               Log in
             </button>
             <button
-              onClick={() => navigate("/onboarding")}
+              onClick={startPlan}
               className="rounded-full bg-[#E50914] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#c90812]"
             >
               Get Started
@@ -85,14 +90,17 @@ export default function Landing() {
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <button
-              onClick={() => navigate("/onboarding")}
+              onClick={startPlan}
               className="inline-flex items-center justify-center gap-2 rounded-full bg-[#E50914] px-7 py-3.5 text-sm font-bold text-white transition hover:bg-[#c90812]"
             >
               Start your plan
               <ArrowRight size={17} />
             </button>
 
-            <button className="inline-flex items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.04] px-7 py-3.5 text-sm font-bold text-white transition hover:bg-white/[0.08]">
+            <button
+              onClick={() => setChatOpen(true)}
+              className="inline-flex items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.04] px-7 py-3.5 text-sm font-bold text-white transition hover:bg-white/[0.08]"
+            >
               See how it works
             </button>
           </div>
@@ -111,14 +119,21 @@ export default function Landing() {
             <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-base font-semibold text-white">
-                  Pay card balances below 30% before statement date.
+                  {topMission
+                    ? topMission.title
+                    : "You're in strong shape — no urgent blockers."}
                 </p>
                 <p className="mt-1 text-sm text-white/45">
-                  Estimated impact: +20 to +40 points in 30–45 days.
+                  {topMission
+                    ? `Estimated impact: ${topMission.impact}.`
+                    : "Keep it up to stay mortgage-ready."}
                 </p>
               </div>
 
-              <button className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-neutral-200">
+              <button
+                onClick={startPlan}
+                className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-neutral-200"
+              >
                 Take Action
               </button>
             </div>
@@ -152,7 +167,7 @@ export default function Landing() {
                     <CardItem
                       icon={<Home size={16} />}
                       label="Goal"
-                      value="Buy a house in 12 months"
+                      value={`Buy a house in ${profile.goal.timeframeMonths} months`}
                     />
                   </FloatingCard>
 
@@ -160,7 +175,7 @@ export default function Landing() {
                     <CardItem
                       icon={<TrendingUp size={16} />}
                       label="Readiness"
-                      value="62%"
+                      value={`${result.score}%`}
                       big
                     />
                   </FloatingCard>
@@ -169,7 +184,7 @@ export default function Landing() {
                     <CardItem
                       icon={<AlertTriangle size={16} />}
                       label="Top Blocker"
-                      value="High utilization"
+                      value={result.topBlocker}
                     />
                   </FloatingCard>
 
@@ -177,7 +192,7 @@ export default function Landing() {
                     <CardItem
                       icon={<CreditCard size={16} />}
                       label="Next Mission"
-                      value="Cards below 30%"
+                      value={topMission ? topMission.title : "On track"}
                     />
                   </FloatingCard>
                 </>
@@ -202,29 +217,38 @@ export default function Landing() {
               </div>
 
               <button
-                onClick={() => setActive(!active)}
+                onClick={() => setChatOpen(true)}
                 className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/[0.1] bg-[#1C1C1F] px-5 py-3 text-sm font-semibold text-white transition hover:border-[#E50914]/50 hover:bg-[#222225]"
               >
                 <MessageCircle size={16} className="text-[#E50914]" />
-                {active ? "Hide coach insights" : "Tap GRAPH Coach"}
+                Any Question? 
               </button>
             </div>
           </div>
 
           <div className="relative mx-auto -mt-8 max-w-[90%] rounded-[1.5rem] border border-white/[0.08] bg-[#151518] p-5 shadow-2xl">
             <div className="grid gap-4 md:grid-cols-3">
-              <InfoStat title="Readiness" value="62%" />
-              <InfoStat title="Timeline" value="12 months" />
-              <InfoStat title="Priority" value="Utilization" />
+              <InfoStat title="Readiness" value={`${result.score}%`} />
+              <InfoStat
+                title="Timeline"
+                value={`${profile.goal.timeframeMonths} months`}
+              />
+              <InfoStat title="Priority" value={result.topBlocker} />
             </div>
 
-            <button className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#E50914]">
+            <button
+              onClick={() => navigate(onboarded ? "/roadmap" : "/onboarding")}
+              className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#E50914]"
+            >
               View full action roadmap
               <ChevronRight size={16} />
             </button>
           </div>
         </div>
       </section>
+
+      {/* Chat panel */}
+      <CoachChat open={chatOpen} onClose={() => setChatOpen(false)} />
     </main>
   );
 }

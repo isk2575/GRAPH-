@@ -1,7 +1,8 @@
 import * as pdfjsLib from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+const API_BASE = "http://localhost:8000";
 
 export interface ParsedCredit {
   scoreRange?: string;
@@ -14,7 +15,7 @@ export interface ParsedCredit {
 
 export interface ParseResult {
   data: ParsedCredit;
-  foundFields: string[]; // which fields we actually detected
+  foundFields: string[];
   rawTextLength: number;
 }
 
@@ -33,72 +34,42 @@ async function extractText(file: File): Promise<string> {
   return text;
 }
 
-// Pull all dollar amounts that follow a given keyword within a window
-function sumAfterKeyword(text: string, keyword: RegExp): number | undefined {
-  const matches = [
-    ...text.matchAll(
-      new RegExp(keyword.source + "[^$]{0,40}\\$\\s*([\\d,]+)", "gi")
-    ),
-  ];
-  if (matches.length === 0) return undefined;
-  return matches.reduce((sum, m) => sum + Number(m[1].replace(/,/g, "")), 0);
-}
-
-function scoreToRange(score: number): string {
-  if (score < 580) return "<580";
-  if (score < 670) return "580-669";
-  if (score < 740) return "670-739";
-  if (score < 800) return "740-799";
-  return "800+";
-}
-
-function detectScore(text: string): string | undefined {
-  const contextMatch = text.match(
-    /(?:FICO|credit score|score)[^\d]{0,25}(\d{3})/i
-  );
-  if (contextMatch) {
-    const n = Number(contextMatch[1]);
-    if (n >= 300 && n <= 850) return scoreToRange(n);
-  }
-  return undefined;
-}
-
 export async function parseCreditReport(file: File): Promise<ParseResult> {
   const rawText = await extractText(file);
-  const text = rawText.replace(/\s+/g, " ");
 
+  // If there's essentially no text, it's likely a scanned image — no text layer.
+  if (rawText.trim().length < 20) {
+    throw new Error(
+      "This PDF has no readable text (it may be a scanned image). Please enter your details manually."
+    );
+  }
+
+  const res = await fetch(`${API_BASE}/api/credit/extract`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: rawText }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Extraction failed (${res.status}).`);
+  }
+
+  const result = await res.json();
+
+  // Normalize: strip nulls so only real fields flow into the form.
   const data: ParsedCredit = {};
-  const foundFields: string[] = [];
+  const raw = result.data ?? {};
+  if (raw.scoreRange != null) data.scoreRange = raw.scoreRange;
+  if (raw.totalCardLimit != null) data.totalCardLimit = raw.totalCardLimit;
+  if (raw.totalCardBalance != null) data.totalCardBalance = raw.totalCardBalance;
+  if (raw.onTimePaymentRate != null)
+    data.onTimePaymentRate = raw.onTimePaymentRate;
+  if (raw.numAccounts != null) data.numAccounts = raw.numAccounts;
+  if (raw.hardInquiries != null) data.hardInquiries = raw.hardInquiries;
 
-  const scoreRange = detectScore(text);
-  if (scoreRange) {
-    data.scoreRange = scoreRange;
-    foundFields.push("scoreRange");
-  }
-
-  const limit = sumAfterKeyword(text, /credit limit|high (?:balance|credit)|limit/);
-  if (limit) {
-    data.totalCardLimit = limit;
-    foundFields.push("totalCardLimit");
-  }
-
-  const balance = sumAfterKeyword(text, /balance|current balance/);
-  if (balance) {
-    data.totalCardBalance = balance;
-    foundFields.push("totalCardBalance");
-  }
-
-  const inquiryMatches = text.match(/hard inquir(?:y|ies)|inquiry/gi);
-  if (inquiryMatches) {
-    data.hardInquiries = inquiryMatches.length;
-    foundFields.push("hardInquiries");
-  }
-
-  const accountMatches = text.match(/account number|acct #|account #/gi);
-  if (accountMatches) {
-    data.numAccounts = accountMatches.length;
-    foundFields.push("numAccounts");
-  }
-
-  return { data, foundFields, rawTextLength: rawText.length };
+  return {
+    data,
+    foundFields: result.foundFields ?? [],
+    rawTextLength: rawText.length,
+  };
 }

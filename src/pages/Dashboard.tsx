@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowRight,
   RotateCcw,
+  Map,
 } from "lucide-react";
 import { useUser } from "../context/UserContext";
 import { computeReadiness, type Mission } from "../lib/readiness";
@@ -79,6 +80,25 @@ export default function Dashboard() {
           />
         </div>
 
+        {/* Journey banner */}
+        <button
+          onClick={() => navigate("/journey")}
+          className="mt-8 flex w-full items-center justify-between rounded-[1.5rem] border border-[#E50914]/25 bg-gradient-to-r from-[#E50914]/[0.12] to-transparent p-6 text-left transition hover:border-[#E50914]/40"
+        >
+          <div className="flex items-center gap-4">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#E50914] text-white">
+              <Map size={22} />
+            </span>
+            <div>
+              <p className="font-bold">Start your journey</p>
+              <p className="text-sm text-white/55">
+                Follow your step-by-step path to mortgage-ready
+              </p>
+            </div>
+          </div>
+          <ChevronRight size={22} className="text-[#E50914]" />
+        </button>
+
         {/* Factor breakdown */}
         <div className="mt-8 rounded-[1.5rem] border border-white/[0.08] bg-[#141416] p-6">
           <h2 className="text-lg font-bold">Readiness breakdown</h2>
@@ -109,12 +129,20 @@ export default function Dashboard() {
         {/* Missions preview */}
         <div className="mt-8 flex items-center justify-between">
           <h2 className="text-lg font-bold">Your missions</h2>
-          <button
-            onClick={() => navigate("/roadmap")}
-            className="inline-flex items-center gap-1 text-sm font-semibold text-[#E50914]"
-          >
-            Full roadmap <ChevronRight size={15} />
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate("/journey")}
+              className="inline-flex items-center gap-1 text-sm font-semibold text-[#E50914]"
+            >
+              Journey <Map size={15} />
+            </button>
+            <button
+              onClick={() => navigate("/roadmap")}
+              className="inline-flex items-center gap-1 text-sm font-semibold text-[#E50914]"
+            >
+              List <ChevronRight size={15} />
+            </button>
+          </div>
         </div>
         <div className="mt-4 space-y-3">
           {loadingMissions ? (
@@ -145,7 +173,7 @@ export default function Dashboard() {
               ))}
               {missions.length === 0 && (
                 <p className="rounded-2xl border border-white/[0.08] bg-[#141416] p-5 text-white/55">
-                  No urgent blockers — you're in strong shape. 🎉
+                  No urgent blockers, you're in strong shape. 🎉
                 </p>
               )}
             </>
@@ -161,10 +189,7 @@ function TopNav() {
   return (
     <nav className="border-b border-white/[0.08] bg-[#0B0B0C]/95">
       <div className="mx-auto flex h-20 max-w-5xl items-center justify-between px-6">
-        <button
-          onClick={() => navigate("/")}
-          className="flex items-center gap-3"
-        >
+        <button onClick={() => navigate("/")} className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E50914] text-base font-black text-white">
             G
           </div>
@@ -174,6 +199,7 @@ function TopNav() {
           <button onClick={() => navigate("/dashboard")} className="text-white">
             Dashboard
           </button>
+          <button onClick={() => navigate("/journey")}>Journey</button>
           <button onClick={() => navigate("/roadmap")}>Roadmap</button>
           <button onClick={() => navigate("/credit")}>Credit</button>
         </div>

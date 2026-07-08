@@ -4,6 +4,7 @@ import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
 import Roadmap from "./pages/Roadmap";
 import CreditDetail from "./pages/CreditDetail";
+import Journey from "./pages/Journey";
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/roadmap" element={<Roadmap />} />
       <Route path="/credit" element={<CreditDetail />} />
+      <Route path="/journey" element={<Journey />} />
     </Routes>
   );
 }

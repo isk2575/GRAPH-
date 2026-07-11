@@ -3,3 +3,6 @@ uvicorn[standard]
 anthropic
 python-dotenv
 pydantic
+firebase-admin
+psycopg[binary]
+sqlalchemy

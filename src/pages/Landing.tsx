@@ -13,6 +13,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useUser } from "../context/UserContext";
+import { useAuth } from "../context/AuthContext";
 import { computeReadiness, generateMissions } from "../lib/readiness";
 import CoachChat from "../components/CoachChat";
 
@@ -24,11 +25,20 @@ export default function Landing() {
   const navigate = useNavigate();
 
   const { profile, onboarded } = useUser();
+  const { user, logOut } = useAuth();
+
   const result = computeReadiness(profile);
-  const missions = generateMissions(result);
+  const missions = generateMissions(result, profile);
   const topMission = missions[0];
 
-  const startPlan = () => navigate(onboarded ? "/dashboard" : "/onboarding");
+  // Signed out → login. Signed in → onboarding or dashboard.
+  const startPlan = () => {
+    if (!user) {
+      navigate("/login", { state: { from: "/onboarding" } });
+    } else {
+      navigate(onboarded ? "/dashboard" : "/onboarding");
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#0B0B0C] text-white antialiased">
@@ -56,15 +66,40 @@ export default function Landing() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="hidden rounded-full border border-white/[0.12] bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/[0.08] sm:block">
-              Log in
-            </button>
-            <button
-              onClick={startPlan}
-              className="rounded-full bg-[#E50914] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#c90812]"
-            >
-              Get Started
-            </button>
+            {user ? (
+              <>
+                <span className="hidden text-sm text-white/50 sm:block">
+                  {user.email}
+                </span>
+                <button
+                  onClick={() => navigate("/dashboard")}
+                  className="rounded-full border border-white/[0.12] bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={logOut}
+                  className="rounded-full bg-[#E50914] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#c90812]"
+                >
+                  Log out
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => navigate("/login")}
+                  className="hidden rounded-full border border-white/[0.12] bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/[0.08] sm:block"
+                >
+                  Log in
+                </button>
+                <button
+                  onClick={startPlan}
+                  className="rounded-full bg-[#E50914] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#c90812]"
+                >
+                  Get Started
+                </button>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -107,7 +142,10 @@ export default function Landing() {
 
           <div className="mt-10 grid gap-3 sm:grid-cols-3">
             <FeaturePill icon={<ShieldCheck size={17} />} label="Secure" />
-            <FeaturePill icon={<CalendarDays size={17} />} label="12-month plan" />
+            <FeaturePill
+              icon={<CalendarDays size={17} />}
+              label={`${profile.goal.timeframeMonths}-month plan`}
+            />
             <FeaturePill icon={<Wallet size={17} />} label="Budget-aware" />
           </div>
 
@@ -132,7 +170,7 @@ export default function Landing() {
 
               <button
                 onClick={startPlan}
-                className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-neutral-200"
+                className="shrink-0 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-neutral-200"
               >
                 Take Action
               </button>
@@ -221,7 +259,7 @@ export default function Landing() {
                 className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/[0.1] bg-[#1C1C1F] px-5 py-3 text-sm font-semibold text-white transition hover:border-[#E50914]/50 hover:bg-[#222225]"
               >
                 <MessageCircle size={16} className="text-[#E50914]" />
-                Any Question? 
+                Tap GRAPH Coach
               </button>
             </div>
           </div>
@@ -237,7 +275,9 @@ export default function Landing() {
             </div>
 
             <button
-              onClick={() => navigate(onboarded ? "/roadmap" : "/onboarding")}
+              onClick={() =>
+                user && onboarded ? navigate("/journey") : startPlan()
+              }
               className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#E50914]"
             >
               View full action roadmap
@@ -247,7 +287,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Chat panel */}
       <CoachChat open={chatOpen} onClose={() => setChatOpen(false)} />
     </main>
   );
@@ -282,7 +321,7 @@ function CardItem({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.06] text-[#E50914]">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-[#E50914]">
         {icon}
       </div>
 

@@ -1,8 +1,7 @@
 import * as pdfjsLib from "pdfjs-dist";
+import { apiPost } from "./api";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-
-const API_BASE = "http://localhost:8000";
 
 export interface ParsedCredit {
   scoreRange?: string;
@@ -37,35 +36,32 @@ async function extractText(file: File): Promise<string> {
 export async function parseCreditReport(file: File): Promise<ParseResult> {
   const rawText = await extractText(file);
 
-  // If there's essentially no text, it's likely a scanned image — no text layer.
+  // No text layer means it's a scanned image — pdf.js can't help, and this
+  // would just waste a model call.
   if (rawText.trim().length < 20) {
     throw new Error(
       "This PDF has no readable text (it may be a scanned image). Please enter your details manually."
     );
   }
 
-  const res = await fetch(`${API_BASE}/api/credit/extract`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: rawText }),
-  });
+  const result = await apiPost<{
+    data: Record<string, unknown>;
+    foundFields: string[];
+  }>("/api/credit/extract", { text: rawText });
 
-  if (!res.ok) {
-    throw new Error(`Extraction failed (${res.status}).`);
-  }
-
-  const result = await res.json();
-
-  // Normalize: strip nulls so only real fields flow into the form.
+  // Strip nulls so only fields the model actually found flow into the form.
   const data: ParsedCredit = {};
   const raw = result.data ?? {};
-  if (raw.scoreRange != null) data.scoreRange = raw.scoreRange;
-  if (raw.totalCardLimit != null) data.totalCardLimit = raw.totalCardLimit;
-  if (raw.totalCardBalance != null) data.totalCardBalance = raw.totalCardBalance;
+  if (raw.scoreRange != null) data.scoreRange = raw.scoreRange as string;
+  if (raw.totalCardLimit != null)
+    data.totalCardLimit = raw.totalCardLimit as number;
+  if (raw.totalCardBalance != null)
+    data.totalCardBalance = raw.totalCardBalance as number;
   if (raw.onTimePaymentRate != null)
-    data.onTimePaymentRate = raw.onTimePaymentRate;
-  if (raw.numAccounts != null) data.numAccounts = raw.numAccounts;
-  if (raw.hardInquiries != null) data.hardInquiries = raw.hardInquiries;
+    data.onTimePaymentRate = raw.onTimePaymentRate as number;
+  if (raw.numAccounts != null) data.numAccounts = raw.numAccounts as number;
+  if (raw.hardInquiries != null)
+    data.hardInquiries = raw.hardInquiries as number;
 
   return {
     data,

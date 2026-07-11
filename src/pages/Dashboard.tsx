@@ -54,12 +54,12 @@ export default function Dashboard() {
             </p>
           </div>
           <button
-            onClick={reset}
+            onClick={() => void reset()}
             className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white/70 transition hover:bg-white/[0.08]"
-          >
+        >
             <RotateCcw size={14} />
             Reset demo
-          </button>
+            </button>
         </div>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-3">

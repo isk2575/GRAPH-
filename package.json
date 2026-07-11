@@ -13,6 +13,7 @@
     "@splinetool/react-spline": "^4.1.0",
     "@splinetool/runtime": "^1.12.98",
     "@tailwindcss/vite": "^4.3.2",
+    "firebase": "^12.15.0",
     "lucide-react": "^1.22.0",
     "pdfjs-dist": "^6.1.200",
     "react": "^19.2.7",

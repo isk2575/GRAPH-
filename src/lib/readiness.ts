@@ -9,6 +9,7 @@ export interface UserProfile {
     annualIncome: number;
     monthlyDebtPayments: number;
     savings: number;
+    monthlyPaydownCapacity: number; // extra $/mo available beyond minimums
   };
   credit: {
     scoreRange: string;
@@ -40,7 +41,33 @@ export interface Mission {
   priority: number;
 }
 
+export type AffordabilityTier = "none" | "tight" | "moderate" | "strong";
+
 const clamp = (n: number, min = 0, max = 100) => Math.min(max, Math.max(min, n));
+
+/**
+ * How realistic is "pay down your balances" for this person?
+ * Measured as how much of their revolving balance they could clear per year
+ * with their stated spare capacity. Deliberately conservative.
+ */
+export function affordabilityTier(profile: UserProfile): AffordabilityTier {
+  const capacity = profile.finances.monthlyPaydownCapacity;
+  const balance = profile.credit.totalCardBalance;
+
+  if (capacity <= 0) return "none";
+  if (balance <= 0) return "strong";
+
+  const annualClearRatio = (capacity * 12) / balance;
+  if (annualClearRatio < 0.25) return "tight";
+  if (annualClearRatio < 0.75) return "moderate";
+  return "strong";
+}
+
+/** True when paydown-first advice would be unreachable and we should lead with free levers. */
+export function needsNoCostPath(profile: UserProfile): boolean {
+  const tier = affordabilityTier(profile);
+  return tier === "none" || tier === "tight";
+}
 
 export function computeReadiness(profile: UserProfile): ReadinessResult {
   const { finances, credit } = profile;
@@ -93,7 +120,6 @@ export function computeReadiness(profile: UserProfile): ReadinessResult {
   return { score, breakdown, topBlocker };
 }
 
-// Mission templates keyed by factor; chosen when that factor scores low.
 const MISSION_TEMPLATES: Record<
   string,
   Omit<Mission, "id" | "priority"> & { threshold: number }
@@ -140,7 +166,30 @@ const MISSION_TEMPLATES: Record<
   },
 };
 
-export function generateMissions(result: ReadinessResult): Mission[] {
+// No-cost alternatives used when paydown isn't financially reachable.
+const NO_COST_TEMPLATES: Record<string, Omit<Mission, "id" | "priority">> = {
+  Utilization: {
+    factor: "Utilization",
+    title: "Request a credit limit increase",
+    detail:
+      "Raising your limit lowers utilization without spending a dollar. Ask for a soft-pull increase so it doesn't add a hard inquiry.",
+    impact: "Lowers utilization at zero cost",
+  },
+  "Debt-to-income": {
+    factor: "Debt-to-income",
+    title: "Review your report for accounts that aren't yours",
+    detail:
+      "Inaccurate accounts inflate your debt load. Disputing genuine errors with the bureaus is free and they must investigate within 30 days.",
+    impact: "Removes debt you don't actually owe",
+  },
+};
+
+export function generateMissions(
+  result: ReadinessResult,
+  profile?: UserProfile
+): Mission[] {
+  const noCost = profile ? needsNoCostPath(profile) : false;
+
   return result.breakdown
     .filter((b) => {
       const t = MISSION_TEMPLATES[b.label];
@@ -148,7 +197,10 @@ export function generateMissions(result: ReadinessResult): Mission[] {
     })
     .sort((a, b) => a.score - b.score)
     .map((b, i) => {
-      const t = MISSION_TEMPLATES[b.label];
+      const t =
+        noCost && NO_COST_TEMPLATES[b.label]
+          ? NO_COST_TEMPLATES[b.label]
+          : MISSION_TEMPLATES[b.label];
       return {
         id: b.label.toLowerCase().replace(/\s+/g, "-"),
         factor: t.factor,
@@ -162,7 +214,12 @@ export function generateMissions(result: ReadinessResult): Mission[] {
 
 export const defaultUserProfile: UserProfile = {
   goal: { type: "buy_home", timeframeMonths: 12 },
-  finances: { annualIncome: 65000, monthlyDebtPayments: 850, savings: 4200 },
+  finances: {
+    annualIncome: 65000,
+    monthlyDebtPayments: 850,
+    savings: 4200,
+    monthlyPaydownCapacity: 150,
+  },
   credit: {
     scoreRange: "670-739",
     totalCardLimit: 8000,

@@ -29,3 +29,6 @@ dist-ssr
 backend/.env
 backend/venv
 __pycache__
+backend/firebase-service-account.json
+
+backend/*-firebase-adminsdk-*.json

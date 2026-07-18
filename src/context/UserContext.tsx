@@ -6,7 +6,12 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { defaultUserProfile, type UserProfile } from "../lib/readiness";
+import {
+  defaultUserProfile,
+  computeReadiness,
+  type UserProfile,
+  type Baseline,
+} from "../lib/readiness";
 import { useAuth } from "./AuthContext";
 import { apiGet, apiPut } from "../lib/api";
 
@@ -16,8 +21,10 @@ interface UserContextValue {
   updateProfile: (patch: Partial<UserProfile>) => void;
   onboarded: boolean;
   setOnboarded: (v: boolean) => void;
+  baseline: Baseline | null;
   loadingProfile: boolean;
   reset: () => Promise<void>;
+  completeOnboarding: (finalProfile: UserProfile) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextValue | undefined>(undefined);
@@ -27,12 +34,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const [profile, setProfileState] = useState<UserProfile>(defaultUserProfile);
   const [onboarded, setOnboardedState] = useState(false);
+  const [baseline, setBaseline] = useState<Baseline | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
-  // Prevents the initial DB load from immediately writing back to the DB.
   const hydrated = useRef(false);
 
-  // Load from Postgres whenever the signed-in user changes.
   useEffect(() => {
     if (authLoading) return;
 
@@ -40,6 +46,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       hydrated.current = false;
       setProfileState(defaultUserProfile);
       setOnboardedState(false);
+      setBaseline(null);
       setLoadingProfile(false);
       return;
     }
@@ -48,11 +55,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setLoadingProfile(true);
     hydrated.current = false;
 
-    apiGet<{ data: UserProfile | null; onboarded: boolean }>("/api/profile")
+    apiGet<{
+      data: UserProfile | null;
+      onboarded: boolean;
+      baseline: Baseline | null;
+    }>("/api/profile")
       .then((res) => {
         if (cancelled) return;
         setProfileState(res.data ?? defaultUserProfile);
         setOnboardedState(res.onboarded);
+        setBaseline(res.baseline);
       })
       .catch(() => {
         if (!cancelled) setProfileState(defaultUserProfile);
@@ -69,12 +81,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
   }, [user, authLoading]);
 
-  // Persist changes back to Postgres.
+  // Persist profile changes. Baseline is intentionally NOT sent here — it's
+  // written once by completeOnboarding and frozen by the backend thereafter.
   useEffect(() => {
     if (!user || !hydrated.current) return;
-    apiPut("/api/profile", { data: profile, onboarded }).catch(() => {
-      /* non-fatal; the UI keeps working on in-memory state */
-    });
+    apiPut("/api/profile", { data: profile, onboarded }).catch(() => {});
   }, [profile, onboarded, user]);
 
   const setProfile = (p: UserProfile) => setProfileState(p);
@@ -82,13 +93,34 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setProfileState((prev) => ({ ...prev, ...patch }));
   const setOnboarded = (v: boolean) => setOnboardedState(v);
 
+  const completeOnboarding = async (finalProfile: UserProfile) => {
+    const result = computeReadiness(finalProfile);
+    const snapshot: Baseline = {
+      score: result.score,
+      breakdown: result.breakdown,
+    };
+    setProfileState(finalProfile);
+    setOnboardedState(true);
+    setBaseline((prev) => prev ?? snapshot);
+
+    if (user) {
+      await apiPut("/api/profile", {
+        data: finalProfile,
+        onboarded: true,
+        baseline: snapshot,
+      }).catch(() => {});
+    }
+  };
+
   const reset = async () => {
     setProfileState(defaultUserProfile);
     setOnboardedState(false);
+    setBaseline(null);
     if (user) {
       await apiPut("/api/profile", {
         data: defaultUserProfile,
         onboarded: false,
+        baseline: null,
       }).catch(() => {});
       await apiPut("/api/progress", { activeHabits: [], doneStops: [] }).catch(
         () => {}
@@ -104,8 +136,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         updateProfile,
         onboarded,
         setOnboarded,
+        baseline,
         loadingProfile,
         reset,
+        completeOnboarding,
       }}
     >
       {children}

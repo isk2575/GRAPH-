@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from anthropic import Anthropic
-from sqlalchemy import select
+from sqlalchemy import select, func as sqlfunc
 from sqlalchemy.dialects.postgresql import insert
 
 load_dotenv()
@@ -167,6 +167,7 @@ class DisputeResponse(BaseModel):
 class ProfilePayload(BaseModel):
     data: dict
     onboarded: bool
+    baseline: dict | None = None
 
 
 class ProgressPayload(BaseModel):
@@ -361,28 +362,47 @@ def _ensure_user(uid: str, email: str | None = None) -> None:
 def get_profile(uid: str = Depends(verify_token)):
     with engine.connect() as conn:
         row = conn.execute(
-            select(profiles.c.data, profiles.c.onboarded).where(profiles.c.uid == uid)
+            select(
+                profiles.c.data, profiles.c.onboarded, profiles.c.baseline
+            ).where(profiles.c.uid == uid)
         ).first()
 
     if not row:
-        return {"data": None, "onboarded": False}
+        return {"data": None, "onboarded": False, "baseline": None}
 
-    return {"data": row.data, "onboarded": row.onboarded == "true"}
+    return {
+        "data": row.data,
+        "onboarded": row.onboarded == "true",
+        "baseline": row.baseline,
+    }
 
 
 @app.put("/api/profile")
 def put_profile(payload: ProfilePayload, uid: str = Depends(verify_token)):
     _ensure_user(uid)
 
-    stmt = insert(profiles).values(
-        uid=uid,
-        data=payload.data,
-        onboarded="true" if payload.onboarded else "false",
-    )
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["uid"],
-        set_={"data": stmt.excluded.data, "onboarded": stmt.excluded.onboarded},
-    )
+    values = {
+        "uid": uid,
+        "data": payload.data,
+        "onboarded": "true" if payload.onboarded else "false",
+    }
+    if payload.baseline is not None:
+        values["baseline"] = payload.baseline
+
+    stmt = insert(profiles).values(**values)
+
+    update_set = {
+        "data": stmt.excluded.data,
+        "onboarded": stmt.excluded.onboarded,
+    }
+    # coalesce keeps the FIRST baseline: once set at onboarding it's never
+    # overwritten, so "where you started" stays fixed.
+    if payload.baseline is not None:
+        update_set["baseline"] = sqlfunc.coalesce(
+            profiles.c.baseline, stmt.excluded.baseline
+        )
+
+    stmt = stmt.on_conflict_do_update(index_elements=["uid"], set_=update_set)
 
     with engine.begin() as conn:
         conn.execute(stmt)
@@ -438,8 +458,6 @@ def put_progress(payload: ProgressPayload, uid: str = Depends(verify_token)):
 def generate_missions(req: CoachRequest, uid: str = Depends(verify_token)):
     _ensure_user(uid)
 
-    # Missions derive from the same profile as the plan, so they share its
-    # signature. If it matches what we stored, serve from Postgres — no model call.
     with engine.connect() as conn:
         row = conn.execute(
             select(plans.c.missions, plans.c.signature).where(plans.c.uid == uid)
@@ -473,8 +491,6 @@ def generate_missions(req: CoachRequest, uid: str = Depends(verify_token)):
 
     stored = [m.model_dump() for m in result.missions]
 
-    # Upsert onto the plan row. If no plan exists yet, this seeds a row that
-    # /api/coach/plan will fill in with habits and stops.
     stmt = insert(plans).values(
         uid=uid,
         signature=req.signature,
@@ -502,8 +518,6 @@ def generate_missions(req: CoachRequest, uid: str = Depends(verify_token)):
 def generate_plan(req: PlanRequest, uid: str = Depends(verify_token)):
     _ensure_user(uid)
 
-    # Return the stored plan if it was built from the same profile signature.
-    # This is why the LLM doesn't rebuild the roadmap on every login.
     with engine.connect() as conn:
         row = conn.execute(
             select(plans.c.data, plans.c.signature, plans.c.source).where(
@@ -547,7 +561,6 @@ cost="money" honestly for each stop."""
             s.month = max(1, min(s.month, n))
             by_month.setdefault(s.month, s)
 
-        # Long plans are where models drop entries. Fill any gap honestly.
         for month in range(1, n + 1):
             if month not in by_month:
                 by_month[month] = Stop(
@@ -572,8 +585,6 @@ cost="money" honestly for each stop."""
             "stops": [s.model_dump() for s in result.stops],
         }
 
-        # Note: `missions` is deliberately absent from set_, so an existing
-        # missions payload survives a plan write.
         stmt = insert(plans).values(
             uid=uid, signature=req.signature, data=stored, source="ai"
         )

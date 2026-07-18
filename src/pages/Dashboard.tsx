@@ -12,10 +12,12 @@ import {
 import { useUser } from "../context/UserContext";
 import { computeReadiness, type Mission } from "../lib/readiness";
 import { fetchCoachMissions } from "../lib/coachApi";
+import ReadinessRadar from "../components/ReadinessRadar";
+import ImprovementBloom from "../components/ImprovementBloom";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { profile, reset } = useUser();
+  const { profile, reset, baseline } = useUser();
   const result = computeReadiness(profile);
 
   const [missions, setMissions] = useState<Mission[]>([]);
@@ -56,10 +58,10 @@ export default function Dashboard() {
           <button
             onClick={() => void reset()}
             className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white/70 transition hover:bg-white/[0.08]"
-        >
+          >
             <RotateCcw size={14} />
             Reset demo
-            </button>
+          </button>
         </div>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
@@ -99,28 +101,31 @@ export default function Dashboard() {
           <ChevronRight size={22} className="text-[#E50914]" />
         </button>
 
-        {/* Factor breakdown */}
+        {/* Current shape — radar */}
         <div className="mt-8 rounded-[1.5rem] border border-white/[0.08] bg-[#141416] p-6">
-          <h2 className="text-lg font-bold">Readiness breakdown</h2>
-          <div className="mt-5 space-y-4">
-            {result.breakdown.map((b) => (
-              <div key={b.label}>
-                <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="text-white/60">{b.label}</span>
-                  <span className="font-semibold">{Math.round(b.score)}%</span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
-                  <div
-                    className="h-full rounded-full bg-[#E50914]"
-                    style={{ width: `${Math.round(b.score)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+          <h2 className="text-lg font-bold">The shape of your credit</h2>
+          <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-white/35">
+            Where you stand right now
+          </p>
+          <div className="mt-4">
+            <ReadinessRadar breakdown={result.breakdown} />
+          </div>
+        </div>
+
+        {/* Improvement — bloom vs baseline */}
+        <div className="mt-6 rounded-[1.5rem] border border-white/[0.08] bg-[#141416] p-6">
+          <h2 className="text-lg font-bold">Your progress</h2>
+          <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-white/35">
+            {baseline
+              ? "Bright = now · dim = where you started"
+              : "Complete onboarding to set your baseline"}
+          </p>
+          <div className="mt-6">
+            <ImprovementBloom current={result.breakdown} baseline={baseline} />
           </div>
           <button
             onClick={() => navigate("/credit")}
-            className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-[#E50914]"
+            className="mt-6 inline-flex items-center gap-1 text-sm font-semibold text-[#E50914]"
           >
             View credit detail <ChevronRight size={15} />
           </button>
@@ -147,7 +152,7 @@ export default function Dashboard() {
         <div className="mt-4 space-y-3">
           {loadingMissions ? (
             <p className="rounded-2xl border border-white/[0.08] bg-[#141416] p-5 text-white/55">
-              GRAPH Coach is analyzing your profile…
+              Loading your missions…
             </p>
           ) : (
             <>
@@ -173,7 +178,7 @@ export default function Dashboard() {
               ))}
               {missions.length === 0 && (
                 <p className="rounded-2xl border border-white/[0.08] bg-[#141416] p-5 text-white/55">
-                  No urgent blockers, you're in strong shape. 🎉
+                  No urgent blockers — you're in strong shape. 🎉
                 </p>
               )}
             </>
@@ -200,7 +205,7 @@ function TopNav() {
             Dashboard
           </button>
           <button onClick={() => navigate("/journey")}>Journey</button>
-          <button onClick={() => navigate("/roadmap")}>Roadmap</button>
+          <button onClick={() => navigate("/disputes")}>Disputes</button>
           <button onClick={() => navigate("/credit")}>Credit</button>
         </div>
       </div>

@@ -1,6 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Check, Flame, Info, Minus, FileText } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Flame,
+  Info,
+  Minus,
+  FileText,
+  ArrowRight,
+} from "lucide-react";
 import { useUser } from "../context/UserContext";
 import { computeReadiness } from "../lib/readiness";
 import {
@@ -26,8 +34,9 @@ export default function Journey() {
   const [doneStops, setDoneStops] = useState<string[]>([]);
   const [selected, setSelected] = useState<Stop | null>(null);
 
-  // Wait for the profile to hydrate from Postgres before requesting a plan,
-  // otherwise we'd generate one for the default profile and cache it.
+  // Refs to each stop node so the banner can scroll to the current one.
+  const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   useEffect(() => {
     if (loadingProfile) return;
 
@@ -74,11 +83,20 @@ export default function Journey() {
     ? Math.round((doneEffort / totalEffort) * 100)
     : 0;
 
-  const currentStopId = plan.stops.find((s) => !stopDone(s.id))?.id;
+  const currentStop = plan.stops.find((s) => !stopDone(s.id)) ?? null;
+  const currentStopId = currentStop?.id;
   const milestoneCount = plan.stops.filter((s) => s.kind === "milestone").length;
   const freeCount = plan.stops.filter(
     (s) => s.kind === "milestone" && s.cost === "free"
   ).length;
+
+  const jumpToCurrent = () => {
+    if (!currentStop) return;
+    const el = nodeRefs.current[currentStop.id];
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Open its detail sheet after the scroll settles.
+    setTimeout(() => setSelected(currentStop), 350);
+  };
 
   const offsets = [0, 85, 120, 85, 0, -85, -120, -85];
   const nodeOffset = (i: number) => offsets[i % offsets.length];
@@ -129,7 +147,37 @@ export default function Journey() {
           </p>
         ) : (
           <>
-            <section className="rounded-[1.5rem] border border-white/[0.08] bg-[#141416] p-5">
+            {/* Current-stop banner */}
+            {currentStop ? (
+              <button
+                onClick={jumpToCurrent}
+                className="flex w-full items-center justify-between rounded-[1.5rem] border border-[#E50914]/30 bg-gradient-to-r from-[#E50914]/[0.12] to-transparent p-5 text-left transition hover:border-[#E50914]/50"
+              >
+                <div className="flex items-center gap-4">
+                  <RobotAvatar size={44} />
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#E50914]">
+                      You're on Month {currentStop.month} · {currentStop.kind}
+                    </p>
+                    <p className="mt-0.5 font-bold text-white">
+                      {currentStop.title}
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-[#E50914]">
+                  Go to mission <ArrowRight size={15} />
+                </span>
+              </button>
+            ) : (
+              <div className="rounded-[1.5rem] border border-emerald-500/25 bg-emerald-500/[0.06] p-5 text-center">
+                <p className="font-bold text-white">
+                  Every milestone complete — you're mortgage-ready! 🎉
+                </p>
+              </div>
+            )}
+
+            {/* HABITS */}
+            <section className="mt-8 rounded-[1.5rem] border border-white/[0.08] bg-[#141416] p-5">
               <div className="flex items-center gap-2">
                 <Flame size={16} className="text-[#E50914]" />
                 <h2 className="text-sm font-black uppercase tracking-[0.14em]">
@@ -198,6 +246,9 @@ export default function Journey() {
                 return (
                   <div
                     key={s.id}
+                    ref={(el) => {
+                      nodeRefs.current[s.id] = el;
+                    }}
                     className="relative flex w-full flex-col items-center"
                     style={{ marginBottom: i === plan.stops.length - 1 ? 0 : 22 }}
                   >

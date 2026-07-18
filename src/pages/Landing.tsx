@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, type ReactNode } from "react";
+import { Suspense, lazy, useState, useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import { useUser } from "../context/UserContext";
 import { useAuth } from "../context/AuthContext";
-import { computeReadiness, generateMissions } from "../lib/readiness";
+import { computeReadiness } from "../lib/readiness";
+import { fetchCoachPlan, fetchProgress, type Stop } from "../lib/coachApi";
 import CoachChat from "../components/CoachChat";
 
 const Spline = lazy(() => import("@splinetool/react-spline"));
@@ -24,14 +25,33 @@ export default function Landing() {
   const [chatOpen, setChatOpen] = useState(false);
   const navigate = useNavigate();
 
-  const { profile, onboarded } = useUser();
+  const { profile, onboarded, loadingProfile } = useUser();
   const { user, logOut } = useAuth();
 
   const result = computeReadiness(profile);
-  const missions = generateMissions(result, profile);
-  const topMission = missions[0];
+  const showData = Boolean(user) && onboarded;
 
-  // Signed out → login. Signed in → onboarding or dashboard.
+  const [currentStop, setCurrentStop] = useState<Stop | null>(null);
+
+  useEffect(() => {
+    if (!showData || loadingProfile) {
+      setCurrentStop(null);
+      return;
+    }
+    let cancelled = false;
+    Promise.all([fetchCoachPlan(profile), fetchProgress()]).then(
+      ([planRes, prog]) => {
+        if (cancelled) return;
+        const next =
+          planRes.plan.stops.find((s) => !prog.doneStops.includes(s.id)) ?? null;
+        setCurrentStop(next);
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [showData, loadingProfile, profile]);
+
   const startPlan = () => {
     if (!user) {
       navigate("/login", { state: { from: "/onboarding" } });
@@ -39,6 +59,10 @@ export default function Landing() {
       navigate(onboarded ? "/dashboard" : "/onboarding");
     }
   };
+
+  // The floating "Next Mission" card jumps to the journey when there's data,
+  // otherwise nudges the user to finish setup.
+  const openMission = () => (showData ? navigate("/journey") : startPlan());
 
   return (
     <main className="min-h-screen bg-[#0B0B0C] text-white antialiased">
@@ -72,13 +96,15 @@ export default function Landing() {
                   {user.email}
                 </span>
                 <button
-                  onClick={() => navigate("/dashboard")}
+                  onClick={() =>
+                    navigate(onboarded ? "/dashboard" : "/onboarding")
+                  }
                   className="rounded-full border border-white/[0.12] bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
                 >
-                  Dashboard
+                  {onboarded ? "Dashboard" : "Finish setup"}
                 </button>
                 <button
-                  onClick={logOut}
+                  onClick={() => logOut()}
                   className="rounded-full bg-[#E50914] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#c90812]"
                 >
                   Log out
@@ -128,7 +154,7 @@ export default function Landing() {
               onClick={startPlan}
               className="inline-flex items-center justify-center gap-2 rounded-full bg-[#E50914] px-7 py-3.5 text-sm font-bold text-white transition hover:bg-[#c90812]"
             >
-              Start your plan
+              {showData ? "Go to dashboard" : "Start your plan"}
               <ArrowRight size={17} />
             </button>
 
@@ -144,35 +170,55 @@ export default function Landing() {
             <FeaturePill icon={<ShieldCheck size={17} />} label="Secure" />
             <FeaturePill
               icon={<CalendarDays size={17} />}
-              label={`${profile.goal.timeframeMonths}-month plan`}
+              label={
+                showData
+                  ? `${profile.goal.timeframeMonths}-month plan`
+                  : "Goal-based plan"
+              }
             />
             <FeaturePill icon={<Wallet size={17} />} label="Budget-aware" />
           </div>
 
           <div className="mt-10 rounded-[1.5rem] border border-white/[0.08] bg-[#141416] p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#E50914]">
-              Current Mission
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#E50914]">
+                {showData && currentStop
+                  ? `Month ${currentStop.month} · ${currentStop.kind}`
+                  : "Current Mission"}
+              </p>
+              {showData && (
+                <button
+                  onClick={() => navigate("/journey")}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#E50914] hover:underline"
+                >
+                  Go to journey <ArrowRight size={12} />
+                </button>
+              )}
+            </div>
 
             <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-base font-semibold text-white">
-                  {topMission
-                    ? topMission.title
-                    : "You're in strong shape — no urgent blockers."}
+                  {showData
+                    ? currentStop
+                      ? currentStop.title
+                      : "Journey complete — you're mortgage-ready! 🎉"
+                    : "Set your goal and we'll build your first mission."}
                 </p>
                 <p className="mt-1 text-sm text-white/45">
-                  {topMission
-                    ? `Estimated impact: ${topMission.impact}.`
-                    : "Keep it up to stay mortgage-ready."}
+                  {showData
+                    ? currentStop
+                      ? currentStop.impact
+                      : "Every milestone done."
+                    : "Complete your profile to unlock your plan."}
                 </p>
               </div>
 
               <button
-                onClick={startPlan}
+                onClick={openMission}
                 className="shrink-0 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-neutral-200"
               >
-                Take Action
+                {showData ? "Take Action" : "Get Started"}
               </button>
             </div>
           </div>
@@ -205,7 +251,11 @@ export default function Landing() {
                     <CardItem
                       icon={<Home size={16} />}
                       label="Goal"
-                      value={`Buy a house in ${profile.goal.timeframeMonths} months`}
+                      value={
+                        showData
+                          ? `Buy a house in ${profile.goal.timeframeMonths} months`
+                          : "Set your goal"
+                      }
                     />
                   </FloatingCard>
 
@@ -213,8 +263,8 @@ export default function Landing() {
                     <CardItem
                       icon={<TrendingUp size={16} />}
                       label="Readiness"
-                      value={`${result.score}%`}
-                      big
+                      value={showData ? `${result.score}%` : "No data yet"}
+                      big={showData}
                     />
                   </FloatingCard>
 
@@ -222,20 +272,36 @@ export default function Landing() {
                     <CardItem
                       icon={<AlertTriangle size={16} />}
                       label="Top Blocker"
-                      value={result.topBlocker}
+                      value={showData ? result.topBlocker : "Complete setup"}
                     />
                   </FloatingCard>
 
-                  <FloatingCard className="right-5 bottom-28">
+                  {/* Clickable → journey */}
+                  <FloatingCard
+                    className="right-5 bottom-28 cursor-pointer transition hover:border-[#E50914]/40 hover:bg-[#201316]/95"
+                    onClick={openMission}
+                  >
                     <CardItem
                       icon={<CreditCard size={16} />}
                       label="Next Mission"
-                      value={topMission ? topMission.title : "On track"}
+                      value={
+                        showData
+                          ? currentStop
+                            ? `Month ${currentStop.month} · ${currentStop.title}`
+                            : "All done"
+                          : "Not set"
+                      }
                     />
+                    {showData && (
+                      <p className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-[#E50914]">
+                        Go to mission <ArrowRight size={11} />
+                      </p>
+                    )}
                   </FloatingCard>
                 </>
               )}
 
+              {/* Robot tap → toggle insight cards */}
               <div
                 onClick={() => setActive(!active)}
                 className="absolute left-1/2 top-[52%] z-20 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 cursor-pointer transition duration-300 hover:scale-[1.015]"
@@ -254,33 +320,38 @@ export default function Landing() {
                 </Suspense>
               </div>
 
+              {/* Bottom button → open chat */}
               <button
                 onClick={() => setChatOpen(true)}
                 className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/[0.1] bg-[#1C1C1F] px-5 py-3 text-sm font-semibold text-white transition hover:border-[#E50914]/50 hover:bg-[#222225]"
               >
                 <MessageCircle size={16} className="text-[#E50914]" />
-                Tap GRAPH Coach
+                Talk to GRAPH Coach
               </button>
             </div>
           </div>
 
           <div className="relative mx-auto -mt-8 max-w-[90%] rounded-[1.5rem] border border-white/[0.08] bg-[#151518] p-5 shadow-2xl">
             <div className="grid gap-4 md:grid-cols-3">
-              <InfoStat title="Readiness" value={`${result.score}%`} />
+              <InfoStat
+                title="Readiness"
+                value={showData ? `${result.score}%` : "—"}
+              />
               <InfoStat
                 title="Timeline"
-                value={`${profile.goal.timeframeMonths} months`}
+                value={showData ? `${profile.goal.timeframeMonths} months` : "—"}
               />
-              <InfoStat title="Priority" value={result.topBlocker} />
+              <InfoStat
+                title="Priority"
+                value={showData ? result.topBlocker : "—"}
+              />
             </div>
 
             <button
-              onClick={() =>
-                user && onboarded ? navigate("/journey") : startPlan()
-              }
+              onClick={() => (showData ? navigate("/journey") : startPlan())}
               className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#E50914]"
             >
-              View full action roadmap
+              {showData ? "View full action roadmap" : "Complete your profile"}
               <ChevronRight size={16} />
             </button>
           </div>
@@ -295,12 +366,15 @@ export default function Landing() {
 function FloatingCard({
   children,
   className,
+  onClick,
 }: {
   children: ReactNode;
   className?: string;
+  onClick?: () => void;
 }) {
   return (
     <div
+      onClick={onClick}
       className={`absolute z-30 w-[230px] rounded-2xl border border-white/[0.08] bg-[#1B1B1E]/95 p-4 text-left shadow-[0_18px_45px_rgba(0,0,0,0.35)] ${className}`}
     >
       {children}

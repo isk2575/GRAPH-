@@ -31,7 +31,7 @@ const STEPS = ["Goal", "Financials", "Credit profile", "Review"];
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { profile, setProfile, setOnboarded } = useUser(); // add setOnboarded
+ const { profile, completeOnboarding } = useUser(); // add setOnboarded
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<UserProfile>(profile);
 
@@ -55,11 +55,10 @@ export default function Onboarding() {
     }
     };
 
-  const finish = () => {
-    setProfile(draft);
-    setOnboarded(true);
-    navigate("/dashboard");
-  };
+ const finish = async () => {
+  await completeOnboarding(draft);
+  navigate("/dashboard");
+};
 
   const handleFile = async (file: File) => {
     if (file.type !== "application/pdf") {

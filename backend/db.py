@@ -16,7 +16,6 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 metadata = MetaData()
 
-# One row per Firebase user. uid is the Firebase UID — the only identity we trust.
 users = Table(
     "users",
     metadata,
@@ -25,19 +24,18 @@ users = Table(
     Column("created_at", DateTime(timezone=True), server_default=func.now()),
 )
 
-# The user's financial profile (goal, finances, credit). One row per user.
+# `baseline` snapshots the readiness breakdown at onboarding, so the dashboard
+# can show improvement over time. Written once, never overwritten.
 profiles = Table(
     "profiles",
     metadata,
     Column("uid", String(128), primary_key=True),
     Column("data", JSONB, nullable=False),
     Column("onboarded", String(8), nullable=False, server_default="false"),
+    Column("baseline", JSONB),
     Column("updated_at", DateTime(timezone=True), server_default=func.now()),
 )
 
-# The generated coach plan (habits + stops). Cached so the LLM doesn't
-# regenerate it on every login. `signature` tracks which profile it was
-# built from — if the profile changes materially, we regenerate.
 plans = Table(
     "plans",
     metadata,
@@ -49,7 +47,6 @@ plans = Table(
     Column("created_at", DateTime(timezone=True), server_default=func.now()),
 )
 
-# Journey progress: which habits are active, which stops are done.
 progress = Table(
     "progress",
     metadata,
@@ -61,5 +58,6 @@ progress = Table(
 
 
 def init_db() -> None:
-    """Create tables if they don't exist. Safe to call on every startup."""
+    """Create tables if they don't exist. Never ALTERs existing tables —
+    schema changes need manual SQL (see the ALTER for `baseline`)."""
     metadata.create_all(engine)

@@ -1,21 +1,31 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Loader2, Mail, Lock, ArrowRight, Info } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { friendlyAuthError } from "../lib/authErrors";
+import { apiGet } from "../lib/api";
 
 export default function Login() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { signIn, signUp, signInWithGoogle } = useAuth();
-
-  const notice = (location.state as { notice?: string } | null)?.notice ?? null;
 
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // After auth, decide where to send them based on whether they've onboarded.
+  // The token is available immediately after sign-in, so apiGet works here.
+  const routeAfterAuth = async () => {
+    try {
+      const res = await apiGet<{ onboarded: boolean }>("/api/profile");
+      navigate(res.onboarded ? "/dashboard" : "/onboarding", { replace: true });
+    } catch {
+      // If the profile check fails, onboarding is the safe default.
+      navigate("/onboarding", { replace: true });
+    }
+  };
 
   const submit = async () => {
     if (!email || !password || loading) return;
@@ -27,10 +37,9 @@ export default function Login() {
       } else {
         await signIn(email, password);
       }
-      navigate("/", { replace: true });
+      await routeAfterAuth();
     } catch (err) {
       setError(friendlyAuthError(err));
-    } finally {
       setLoading(false);
     }
   };
@@ -40,10 +49,9 @@ export default function Login() {
     setError(null);
     try {
       await signInWithGoogle();
-      navigate("/", { replace: true });
+      await routeAfterAuth();
     } catch (err) {
       setError(friendlyAuthError(err));
-    } finally {
       setLoading(false);
     }
   };
@@ -60,13 +68,6 @@ export default function Login() {
           </div>
           <span className="text-2xl font-black tracking-tight">GRAPH</span>
         </button>
-
-        {notice && (
-          <div className="mb-5 flex items-center gap-2.5 rounded-2xl border border-[#E50914]/25 bg-[#E50914]/[0.08] px-4 py-3">
-            <Info size={15} className="shrink-0 text-[#E50914]" />
-            <p className="text-sm font-semibold text-white/85">{notice}</p>
-          </div>
-        )}
 
         <div className="rounded-[1.75rem] border border-white/[0.08] bg-[#141416] p-8">
           <h1 className="text-2xl font-black tracking-tight">

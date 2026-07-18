@@ -9,7 +9,7 @@ export interface UserProfile {
     annualIncome: number;
     monthlyDebtPayments: number;
     savings: number;
-    monthlyPaydownCapacity: number; // extra $/mo available beyond minimums
+    monthlyPaydownCapacity: number;
   };
   credit: {
     scoreRange: string;
@@ -32,6 +32,11 @@ export interface ReadinessResult {
   topBlocker: string;
 }
 
+export interface Baseline {
+  score: number;
+  breakdown: ReadinessBreakdown[];
+}
+
 export interface Mission {
   id: string;
   factor: string;
@@ -45,11 +50,6 @@ export type AffordabilityTier = "none" | "tight" | "moderate" | "strong";
 
 const clamp = (n: number, min = 0, max = 100) => Math.min(max, Math.max(min, n));
 
-/**
- * How realistic is "pay down your balances" for this person?
- * Measured as how much of their revolving balance they could clear per year
- * with their stated spare capacity. Deliberately conservative.
- */
 export function affordabilityTier(profile: UserProfile): AffordabilityTier {
   const capacity = profile.finances.monthlyPaydownCapacity;
   const balance = profile.credit.totalCardBalance;
@@ -63,7 +63,6 @@ export function affordabilityTier(profile: UserProfile): AffordabilityTier {
   return "strong";
 }
 
-/** True when paydown-first advice would be unreachable and we should lead with free levers. */
 export function needsNoCostPath(profile: UserProfile): boolean {
   const tier = affordabilityTier(profile);
   return tier === "none" || tier === "tight";
@@ -166,7 +165,6 @@ const MISSION_TEMPLATES: Record<
   },
 };
 
-// No-cost alternatives used when paydown isn't financially reachable.
 const NO_COST_TEMPLATES: Record<string, Omit<Mission, "id" | "priority">> = {
   Utilization: {
     factor: "Utilization",
